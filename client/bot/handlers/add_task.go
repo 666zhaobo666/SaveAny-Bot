@@ -87,17 +87,22 @@ func handleAddCallback(ctx *ext.Context, update *ext.Update) error {
 			// 如果获取不到，通过 API 获取机器人发出的消息，再获取它回复的原消息
 			res, err := ctx.Raw.MessagesGetMessages(ctx, []tg.InputMessageClass{&tg.InputMessageID{ID: msgID}})
 			if err == nil {
-				messages := res.GetMessages()
-				if len(messages) > 0 {
-					if m, ok := messages[0].(*tg.Message); ok {
-						if header, ok := m.ReplyTo.(*tg.MessageReplyHeader); ok {
-							origMsgID := header.ReplyToMsgID
-							origRes, err := ctx.Raw.MessagesGetMessages(ctx, []tg.InputMessageClass{&tg.InputMessageID{ID: origMsgID}})
-							if err == nil {
-								origMessages := origRes.GetMessages()
-								if len(origMessages) > 0 {
-									if origM, ok := origMessages[0].(*tg.Message); ok {
-										originalText = origM.Message
+				// 使用接口断言来安全地调用 GetMessages()
+				if messagesClass, ok := res.(interface{ GetMessages() []tg.MessageClass }); ok {
+					messages := messagesClass.GetMessages()
+					if len(messages) > 0 {
+						if m, ok := messages[0].(*tg.Message); ok {
+							if header, ok := m.ReplyTo.(*tg.MessageReplyHeader); ok {
+								origMsgID := header.ReplyToMsgID
+								origRes, err := ctx.Raw.MessagesGetMessages(ctx, []tg.InputMessageClass{&tg.InputMessageID{ID: origMsgID}})
+								if err == nil {
+									if origMessagesClass, ok := origRes.(interface{ GetMessages() []tg.MessageClass }); ok {
+										origMessages := origMessagesClass.GetMessages()
+										if len(origMessages) > 0 {
+											if origM, ok := origMessages[0].(*tg.Message); ok {
+												originalText = origM.Message
+											}
+										}
 									}
 								}
 							}
