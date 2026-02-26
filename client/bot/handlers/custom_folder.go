@@ -36,14 +36,14 @@ func handleFolderReply(ctx *ext.Context, update *ext.Update) error {
 	if !exists {
 		pendingFolderTasksMu.Unlock()
 		// 如果当前用户没有等待输入的任务，放行给其他 Handler 处理
-		return dispatcher.Continue
+		return dispatcher.ContinueGroups
 	}
 
 	// 检查是否是回复消息
 	replyTo := update.EffectiveMessage.ReplyToMessage
 	if replyTo == nil {
 		pendingFolderTasksMu.Unlock()
-		return dispatcher.Continue
+		return dispatcher.ContinueGroups
 	}
 
 	// 取出并清理任务状态

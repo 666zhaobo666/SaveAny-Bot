@@ -79,16 +79,31 @@ func handleAddCallback(ctx *ext.Context, update *ext.Update) error {
 	case tasktype.TaskTypeTgfiles:
 		// 1. 尝试获取原始消息的文本内容
 		var originalText string
-		botMsg, ok := update.CallbackQuery.Message.AsNotEmpty()
-		if ok && botMsg.GetReplyTo() != nil {
-			origMsgID := botMsg.GetReplyTo().GetReplyToMsgID()
-			res, err := ctx.API().MessagesGetMessages(ctx, &tg.MessagesGetMessagesRequest{
-				ID: []tg.InputMessageClass{&tg.InputMessageID{ID: origMsgID}},
+		
+		// 尝试从 update.EffectiveMessage 中获取原始消息文本
+		if update.EffectiveMessage != nil && update.EffectiveMessage.ReplyToMessage != nil && update.EffectiveMessage.ReplyToMessage.Message != nil {
+			originalText = update.EffectiveMessage.ReplyToMessage.Message.Message
+		} else {
+			// 如果获取不到，通过 API 获取机器人发出的消息，再获取它回复的原消息
+			res, err := ctx.Raw.MessagesGetMessages(ctx, &tg.MessagesGetMessagesRequest{
+				ID: []tg.InputMessageClass{&tg.InputMessageID{ID: msgID}},
 			})
 			if err == nil {
 				if msgs, ok := res.(tg.MessageClassArray); ok && len(msgs) > 0 {
 					if m, ok := msgs[0].(*tg.Message); ok {
-						originalText = m.Message
+						if m.ReplyTo != nil {
+							origMsgID := m.ReplyTo.GetReplyToMsgID()
+							origRes, err := ctx.Raw.MessagesGetMessages(ctx, &tg.MessagesGetMessagesRequest{
+								ID: []tg.InputMessageClass{&tg.InputMessageID{ID: origMsgID}},
+							})
+							if err == nil {
+								if origMsgs, ok := origRes.(tg.MessageClassArray); ok && len(origMsgs) > 0 {
+									if origM, ok := origMsgs[0].(*tg.Message); ok {
+										originalText = origM.Message
+									}
+								}
+							}
+						}
 					}
 				}
 			}
@@ -122,7 +137,7 @@ func handleAddCallback(ctx *ext.Context, update *ext.Update) error {
 		ctx.SendMessage(userID, &tg.MessagesSendMessageRequest{
 			Message: "📁 请输入要保存的文件夹名称（直接回复此消息）：\n\n💡 回复 `ok` 将使用默认名称: \n`" + defaultName + "`",
 			ReplyTo: &tg.InputReplyToMessage{
-				ReplyToMsgID: botMsg.ID,
+				ReplyToMsgID: msgID,
 			},
 		})
 		return dispatcher.EndGroups
