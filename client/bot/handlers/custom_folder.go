@@ -1,3 +1,32 @@
+package handlers
+
+import (
+	"path"
+	"strings"
+	"sync"
+
+	"github.com/celestix/gotgproto/dispatcher"
+	"github.com/celestix/gotgproto/ext"
+	"github.com/krau/SaveAny-Bot/client/bot/handlers/utils/shortcut"
+	"github.com/krau/SaveAny-Bot/pkg/tfile"
+	"github.com/krau/SaveAny-Bot/storage"
+)
+
+// 定义等待用户输入文件夹名称的任务状态
+type PendingFolderTask struct {
+	Storage      storage.Storage
+	BaseDirPath  string
+	Files        []tfile.TGFileMessage
+	OriginalText string
+	IsBatch      bool
+	BotMsgID     int
+}
+
+var (
+	pendingFolderTasks   = make(map[int64]PendingFolderTask)
+	pendingFolderTasksMu sync.Mutex
+)
+
 // 处理用户回复文件夹名称的逻辑
 func handleFolderReply(ctx *ext.Context, update *ext.Update) error {
 	userID := update.GetUserChat().GetID()
