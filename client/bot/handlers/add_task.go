@@ -85,20 +85,18 @@ func handleAddCallback(ctx *ext.Context, update *ext.Update) error {
 			originalText = update.EffectiveMessage.ReplyToMessage.Message.Message
 		} else {
 			// 如果获取不到，通过 API 获取机器人发出的消息，再获取它回复的原消息
-			res, err := ctx.Raw.MessagesGetMessages(ctx, &tg.MessagesGetMessagesRequest{
-				ID: []tg.InputMessageClass{&tg.InputMessageID{ID: msgID}},
-			})
+			res, err := ctx.Raw.MessagesGetMessages(ctx, []tg.InputMessageClass{&tg.InputMessageID{ID: msgID}})
 			if err == nil {
-				if msgs, ok := res.(tg.MessageClassArray); ok && len(msgs) > 0 {
-					if m, ok := msgs[0].(*tg.Message); ok {
-						if m.ReplyTo != nil {
-							origMsgID := m.ReplyTo.GetReplyToMsgID()
-							origRes, err := ctx.Raw.MessagesGetMessages(ctx, &tg.MessagesGetMessagesRequest{
-								ID: []tg.InputMessageClass{&tg.InputMessageID{ID: origMsgID}},
-							})
+				messages := res.GetMessages()
+				if len(messages) > 0 {
+					if m, ok := messages[0].(*tg.Message); ok {
+						if header, ok := m.ReplyTo.(*tg.MessageReplyHeader); ok {
+							origMsgID := header.ReplyToMsgID
+							origRes, err := ctx.Raw.MessagesGetMessages(ctx, []tg.InputMessageClass{&tg.InputMessageID{ID: origMsgID}})
 							if err == nil {
-								if origMsgs, ok := origRes.(tg.MessageClassArray); ok && len(origMsgs) > 0 {
-									if origM, ok := origMsgs[0].(*tg.Message); ok {
+								origMessages := origRes.GetMessages()
+								if len(origMessages) > 0 {
+									if origM, ok := origMessages[0].(*tg.Message); ok {
 										originalText = origM.Message
 									}
 								}
