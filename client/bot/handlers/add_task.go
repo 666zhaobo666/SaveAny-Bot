@@ -77,10 +77,55 @@ func handleAddCallback(ctx *ext.Context, update *ext.Update) error {
 
 	switch data.TaskType {
 	case tasktype.TaskTypeTgfiles:
-		if data.AsBatch {
-			return shortcut.CreateAndAddBatchTGFileTaskWithEdit(ctx, userID, selectedStorage, dirPath, data.Files, msgID)
+		// 1. 尝试获取原始消息的文本内容
+		var originalText string
+		botMsg, ok := update.CallbackQuery.Message.AsNotEmpty()
+		if ok && botMsg.GetReplyTo() != nil {
+			origMsgID := botMsg.GetReplyTo().GetReplyToMsgID()
+			res, err := ctx.API().MessagesGetMessages(ctx, &tg.MessagesGetMessagesRequest{
+				ID: []tg.InputMessageClass{&tg.InputMessageID{ID: origMsgID}},
+			})
+			if err == nil {
+				if msgs, ok := res.(tg.MessageClassArray); ok && len(msgs) > 0 {
+					if m, ok := msgs[0].(*tg.Message); ok {
+						originalText = m.Message
+					}
+				}
+			}
 		}
-		return shortcut.CreateAndAddTGFileTaskWithEdit(ctx, userID, selectedStorage, dirPath, data.Files[0], msgID)
+
+		// 2. 生成提示用的默认名称
+		defaultName := "TG_Download"
+		if originalText != "" {
+			runes := []rune(originalText)
+			if len(runes) > 15 {
+				defaultName = string(runes[:15])
+			} else {
+				defaultName = originalText
+			}
+			defaultName = strings.ReplaceAll(defaultName, "\n", " ")
+		}
+
+		// 3. 将任务存入缓存
+		pendingFolderTasksMu.Lock()
+		pendingFolderTasks[userID] = PendingFolderTask{
+			Storage:      selectedStorage,
+			BaseDirPath:  dirPath,
+			Files:        data.Files,
+			OriginalText: originalText,
+			IsBatch:      data.AsBatch,
+			BotMsgID:     msgID,
+		}
+		pendingFolderTasksMu.Unlock()
+
+		// 4. 发送询问消息 (ForceReply 强制用户回复)
+		ctx.SendMessage(userID, &tg.MessagesSendMessageRequest{
+			Message: "📁 请输入要保存的文件夹名称（直接回复此消息）：\n\n💡 回复 `ok` 将使用默认名称: \n`" + defaultName + "`",
+			ReplyTo: &tg.InputReplyToMessage{
+				ReplyToMsgID: botMsg.ID,
+			},
+		})
+		return dispatcher.EndGroups
 	case tasktype.TaskTypeTphpics:
 		return shortcut.CreateAndAddtelegraphWithEdit(ctx, userID, data.TphPageNode, data.TphDirPath, data.TphPics, selectedStorage, msgID)
 	case tasktype.TaskTypeParseditem:
