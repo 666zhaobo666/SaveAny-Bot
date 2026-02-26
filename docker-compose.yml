@@ -1,7 +1,7 @@
 services:
   saveany-bot:
-    image: ghcr.io/krau/saveany-bot:latest
-    container_name: saveany-bot
+    image: saveany-bot-plus:latest
+    container_name: saveany-bot-plus
     restart: unless-stopped
     volumes:
       - ./data:/app/data
