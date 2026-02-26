@@ -8,7 +8,8 @@ import (
 	"github.com/celestix/gotgproto/dispatcher"
 	"github.com/celestix/gotgproto/ext"
 	"github.com/krau/SaveAny-Bot/client/bot/handlers/utils/shortcut"
-	"github.com/krau/SaveAny-Bot/pkg/tfile"
+	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
+	"github.com/krau/SaveAny-Bot/pkg/tcbdata"
 	"github.com/krau/SaveAny-Bot/storage"
 )
 
@@ -16,9 +17,8 @@ import (
 type PendingFolderTask struct {
 	Storage      storage.Storage
 	BaseDirPath  string
-	Files        []tfile.TGFileMessage
+	TaskData     tcbdata.Add
 	OriginalText string
-	IsBatch      bool
 	BotMsgID     int
 }
 
@@ -55,19 +55,24 @@ func handleFolderReply(ctx *ext.Context, update *ext.Update) error {
 	// 如果用户回复 ok 或空，则使用默认名称
 	if strings.ToLower(folderName) == "ok" || folderName == "" {
 		folderName = "TG_Download"
-		if task.OriginalText != "" {
+		if task.TaskData.TaskType == tasktype.TaskTypeParseditem && task.TaskData.ParsedItem != nil && task.TaskData.ParsedItem.Title != "" {
+			folderName = task.TaskData.ParsedItem.Title
+		} else if task.TaskData.TaskType == tasktype.TaskTypeTphpics && task.TaskData.TphDirPath != "" {
+			folderName = task.TaskData.TphDirPath
+		} else if task.OriginalText != "" {
 			runes := []rune(task.OriginalText)
 			if len(runes) > 15 {
 				folderName = string(runes[:15]) // 默认取前15个字符
 			} else {
 				folderName = task.OriginalText
 			}
-			// 替换路径非法字符
-			folderName = strings.ReplaceAll(folderName, "/", "_")
-			folderName = strings.ReplaceAll(folderName, "\\", "_")
-			folderName = strings.ReplaceAll(folderName, "\n", " ")
 		}
 	}
+	
+	// 替换路径非法字符
+	folderName = strings.ReplaceAll(folderName, "/", "_")
+	folderName = strings.ReplaceAll(folderName, "\\", "_")
+	folderName = strings.ReplaceAll(folderName, "\n", " ")
 
 	// 拼接最终的保存目录
 	finalDirPath := path.Join(task.BaseDirPath, folderName)
@@ -82,9 +87,19 @@ func handleFolderReply(ctx *ext.Context, update *ext.Update) error {
 		}
 	}
 
-	// 触发原有的下载任务，保存到新文件夹中
-	if task.IsBatch {
-		return shortcut.CreateAndAddBatchTGFileTaskWithEdit(ctx, userID, task.Storage, finalDirPath, task.Files, task.BotMsgID)
+	// 根据不同的任务类型，触发对应的下载任务，保存到新文件夹中
+	switch task.TaskData.TaskType {
+	case tasktype.TaskTypeTgfiles:
+		if task.TaskData.AsBatch {
+			return shortcut.CreateAndAddBatchTGFileTaskWithEdit(ctx, userID, task.Storage, finalDirPath, task.TaskData.Files, task.BotMsgID)
+		}
+		return shortcut.CreateAndAddTGFileTaskWithEdit(ctx, userID, task.Storage, finalDirPath, task.TaskData.Files[0], task.BotMsgID)
+	case tasktype.TaskTypeTphpics:
+		return shortcut.CreateAndAddtelegraphWithEdit(ctx, userID, task.TaskData.TphPageNode, finalDirPath, task.TaskData.TphPics, task.Storage, task.BotMsgID)
+	case tasktype.TaskTypeParseditem:
+		shortcut.CreateAndAddParsedTaskWithEdit(ctx, task.Storage, finalDirPath, task.TaskData.ParsedItem, task.BotMsgID, userID)
+		return dispatcher.EndGroups
 	}
-	return shortcut.CreateAndAddTGFileTaskWithEdit(ctx, userID, task.Storage, finalDirPath, task.Files[0], task.BotMsgID)
+	
+	return dispatcher.EndGroups
 }

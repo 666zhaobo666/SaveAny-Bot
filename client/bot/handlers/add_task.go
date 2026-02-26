@@ -76,7 +76,7 @@ func handleAddCallback(ctx *ext.Context, update *ext.Update) error {
 	}
 
 	switch data.TaskType {
-	case tasktype.TaskTypeTgfiles:
+	case tasktype.TaskTypeTgfiles, tasktype.TaskTypeTphpics, tasktype.TaskTypeParseditem:
 		// 1. 尝试获取原始消息的文本内容
 		var originalText string
 		
@@ -87,7 +87,6 @@ func handleAddCallback(ctx *ext.Context, update *ext.Update) error {
 			// 如果获取不到，通过 API 获取机器人发出的消息，再获取它回复的原消息
 			res, err := ctx.Raw.MessagesGetMessages(ctx, []tg.InputMessageClass{&tg.InputMessageID{ID: msgID}})
 			if err == nil {
-				// 使用接口断言来安全地调用 GetMessages()
 				if messagesClass, ok := res.(interface{ GetMessages() []tg.MessageClass }); ok {
 					messages := messagesClass.GetMessages()
 					if len(messages) > 0 {
@@ -114,24 +113,28 @@ func handleAddCallback(ctx *ext.Context, update *ext.Update) error {
 
 		// 2. 生成提示用的默认名称
 		defaultName := "TG_Download"
-		if originalText != "" {
+		if data.TaskType == tasktype.TaskTypeParseditem && data.ParsedItem != nil && data.ParsedItem.Title != "" {
+			defaultName = data.ParsedItem.Title
+		} else if data.TaskType == tasktype.TaskTypeTphpics && data.TphDirPath != "" {
+			defaultName = data.TphDirPath
+		} else if originalText != "" {
 			runes := []rune(originalText)
 			if len(runes) > 15 {
 				defaultName = string(runes[:15])
 			} else {
 				defaultName = originalText
 			}
-			defaultName = strings.ReplaceAll(defaultName, "\n", " ")
 		}
+		defaultName = strings.ReplaceAll(defaultName, "\n", " ")
+		defaultName = strings.ReplaceAll(defaultName, "/", "_")
 
 		// 3. 将任务存入缓存
 		pendingFolderTasksMu.Lock()
 		pendingFolderTasks[userID] = PendingFolderTask{
 			Storage:      selectedStorage,
 			BaseDirPath:  dirPath,
-			Files:        data.Files,
+			TaskData:     data,
 			OriginalText: originalText,
-			IsBatch:      data.AsBatch,
 			BotMsgID:     msgID,
 		}
 		pendingFolderTasksMu.Unlock()
@@ -148,13 +151,6 @@ func handleAddCallback(ctx *ext.Context, update *ext.Update) error {
 			},
 		})
 		return dispatcher.EndGroups
-	case tasktype.TaskTypeTphpics:
-		return shortcut.CreateAndAddtelegraphWithEdit(ctx, userID, data.TphPageNode, data.TphDirPath, data.TphPics, selectedStorage, msgID)
-	case tasktype.TaskTypeParseditem:
-		if len(data.ParsedItem.Resources) > 1 {
-			dirPath = path.Join(dirPath, fsutil.NormalizePathname(data.ParsedItem.Title))
-		}
-		shortcut.CreateAndAddParsedTaskWithEdit(ctx, selectedStorage, dirPath, data.ParsedItem, msgID, userID)
 	case tasktype.TaskTypeDirectlinks:
 		shortcut.CreateAndAddDirectTaskWithEdit(ctx, selectedStorage, dirPath, data.DirectLinks, msgID, userID)
 	case tasktype.TaskTypeAria2:
