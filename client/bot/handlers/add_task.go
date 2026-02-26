@@ -142,6 +142,10 @@ func handleAddCallback(ctx *ext.Context, update *ext.Update) error {
 			ReplyTo: &tg.InputReplyToMessage{
 				ReplyToMsgID: msgID,
 			},
+			ReplyMarkup: &tg.ReplyKeyboardForceReply{
+				SingleUse: true,
+				Selective: true,
+			},
 		})
 		return dispatcher.EndGroups
 	case tasktype.TaskTypeTphpics:

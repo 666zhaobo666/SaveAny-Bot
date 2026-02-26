@@ -1,32 +1,3 @@
-package handlers
-
-import (
-	"path"
-	"strings"
-	"sync"
-
-	"github.com/celestix/gotgproto/dispatcher"
-	"github.com/celestix/gotgproto/ext"
-	"github.com/krau/SaveAny-Bot/client/bot/handlers/utils/shortcut"
-	"github.com/krau/SaveAny-Bot/pkg/tfile"
-	"github.com/krau/SaveAny-Bot/storage"
-)
-
-// 定义等待用户输入文件夹名称的任务状态
-type PendingFolderTask struct {
-	Storage      storage.Storage
-	BaseDirPath  string
-	Files        []tfile.TGFileMessage
-	OriginalText string
-	IsBatch      bool
-	BotMsgID     int
-}
-
-var (
-	pendingFolderTasks   = make(map[int64]PendingFolderTask)
-	pendingFolderTasksMu sync.Mutex
-)
-
 // 处理用户回复文件夹名称的逻辑
 func handleFolderReply(ctx *ext.Context, update *ext.Update) error {
 	userID := update.GetUserChat().GetID()
@@ -39,9 +10,11 @@ func handleFolderReply(ctx *ext.Context, update *ext.Update) error {
 		return dispatcher.ContinueGroups
 	}
 
-	// 检查是否是回复消息
-	replyTo := update.EffectiveMessage.ReplyToMessage
-	if replyTo == nil {
+	folderName := strings.TrimSpace(update.EffectiveMessage.Text)
+
+	// 如果是命令，则取消当前等待任务，交由其他 handler 处理
+	if strings.HasPrefix(folderName, "/") {
+		delete(pendingFolderTasks, userID)
 		pendingFolderTasksMu.Unlock()
 		return dispatcher.ContinueGroups
 	}
@@ -50,8 +23,6 @@ func handleFolderReply(ctx *ext.Context, update *ext.Update) error {
 	delete(pendingFolderTasks, userID)
 	pendingFolderTasksMu.Unlock()
 
-	folderName := strings.TrimSpace(update.EffectiveMessage.Text)
-	
 	// 如果用户回复 ok 或空，则使用默认名称
 	if strings.ToLower(folderName) == "ok" || folderName == "" {
 		folderName = "TG_Download"
