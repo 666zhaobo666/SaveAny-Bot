@@ -3,7 +3,6 @@ package handlers
 import (
 	"errors"
 	"fmt"
-	"path"
 	"strings"
 
 	"github.com/celestix/gotgproto/dispatcher"
@@ -14,7 +13,6 @@ import (
 	"github.com/krau/SaveAny-Bot/client/bot/handlers/utils/shortcut"
 	"github.com/krau/SaveAny-Bot/common/i18n"
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
-	"github.com/krau/SaveAny-Bot/common/utils/fsutil"
 	"github.com/krau/SaveAny-Bot/database"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/pkg/tcbdata"
